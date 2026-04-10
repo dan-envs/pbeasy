@@ -272,10 +272,11 @@ collect_menu_items_array()
     item_json=$(echo "$array_json" | jq -c ".[$i]")
     id=$(echo "$item_json" | jq -r '.id')
     text=$(echo "$item_json" | jq -r '.comment' | tr '\n' ' ' | tr -d '\r')
+    nick=$(echo "$item_json" | jq -r '.nickname' | tr -d '\r')
     indent=$(printf '%*s' "$depth" '' | tr ' ' '-')
     if [[ -n "$id" && -n "$text" && -n "${text// }" ]]; then
         indent="${indent} "
-        MENU_ITEMS+=("$id" "${indent}${text}")
+        MENU_ITEMS+=("$id" "${nick%%*( )}: ${indent}${text}")
     fi
     replies=$(echo "$item_json" | jq -c '.replies')
     if [ "$(echo "$replies" | jq 'length')" -gt 0 ]; then
