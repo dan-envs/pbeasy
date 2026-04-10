@@ -1,0 +1,362 @@
+#!/bin/bash
+#set -x
+declare -a MENU_ITEMS=()
+declare NEW_FULLTEXT_REPLY=""
+declare NEW_SELECTED_ID=""
+
+# ---------------------------------
+# usage function for HELP display
+# ---------------------------------
+usage() {
+  cat <<EOF
+PBEasy - PrivateBin Terminal Helper Script
+
+Usage:
+  pb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] | [-h]
+
+Options:
+  -i            Create a default config file at
+                "\$XDG_CONFIG_HOME/pbeasy/config.sh" with default settings.
+                Edit this file to change defaults.
+  -c            Comment or reply to a comment on a PrivateBin paste.
+                If a URL is provided, fetches comments and allows replying by
+                choosing a comment/reply from a list (with preview). The content
+                you reply to, is copied into your edit file in your \$EDITOR.
+                If no comment is selected, creates a new comment. It uses the
+                '--comment-as=name' from your "pbcli" config file by default as
+                your pseudonym. If not set, its anonymous.
+  -u            Upload a paste from commandline as an Attachment. Images will
+                be shown. Plaintext, Markdown and Source Code must be piped in,
+                otherwise they'll be shown only as an attachement!
+                If no URL is provided, sends to your configured PrivateBin
+                instance.
+  -s            Specify the PrivateBin server . Defaults to
+                "https://pb.envs.net/".
+  -d            Enable discussion/comments for the paste, discussion is off
+                by default.
+  -f FORMAT     Specify the paste format (markdown, plaintext, syntax). Doesn't
+                use the format configured in your "pbcli" yet. The default is
+                'plaintext'.
+  -?            Show this help message.
+
+Features:
+  - Interactive comment selection and preview using dialog.
+  - Replies to nested comments supported.
+  - Sends new pastes or comments, copying resulting URL to clipboard with xclip.
+  - Uses your \$EDITOR for editing comments and replies.
+
+Requirements:
+  - \$EDITOR must be set to your preferred text editor
+    (e.g., 'export EDITOR=nvim' in your shell config).
+  - Requires: pbcli, jq, dialog, xclip, fold, mktemp, diff, cat, tee.
+
+Examples:
+  pb -f markdown < file.md
+      Send file.md as a new PrivateBin paste in markdown format.
+
+  pb -c "https://your.privatebin/paste#key"
+      Comment or reply to a comment on the given paste.
+
+  cat political_statement.txt | pb -d -f plaintext
+      Send a new paste with comments enabled in plaintext format with piping to
+      the script.
+  
+  echo "My nice picture" | pb -u image.png
+      Send image.png with a comment "My nice picture" as a new paste to your
+      configured PrivateBin instance. The comment will be attached to the paste.
+
+EOF
+}
+
+# ---------------------------------
+# Normal send function
+# ---------------------------------
+send()
+{
+  if [[ -z "${SEND}" && -p /dev/stdin ]]; then
+      if [[ -n "${DISC}" ]]; then
+        /usr/bin/cat - | /usr/bin/pbcli --comment -f "${FORMAT}" --discussion "${HOST}" | tee /dev/stderr | xclip -i
+      else
+        /usr/bin/cat - | /usr/bin/pbcli --comment -f "${FORMAT}" "${HOST}" | tee /dev/stderr | xclip -i
+      fi
+  elif [[ -n "${SEND}" && -p /dev/stdin ]]; then
+      if [[ -n "${DISC}" ]]; then
+      /usr/bin/cat - | /usr/bin/pbcli --comment --upload "${SEND}" -f "${FORMAT}" --discussion "${HOST}" | tee /dev/stderr | xclip -i
+      else
+      /usr/bin/cat - | /usr/bin/pbcli --comment --upload "${SEND}" -f "${FORMAT}" "${HOST}" | tee /dev/stderr | xclip -i
+      fi
+  else
+      if [[ -n "${DISC}" ]];then
+      /usr/bin/pbcli --comment --upload "${SEND}" -f "${FORMAT}" --discussion "${HOST}"| tee /dev/stderr | xclip -i
+      else
+      /usr/bin/pbcli --comment --upload "${SEND}" -f "${FORMAT}" "${HOST}" | tee /dev/stderr | xclip -i
+      fi
+  fi
+}
+
+# ---------------------------------
+# comment or reply to a comment
+# ---------------------------------
+comment()
+{
+  echo "${1}"
+  if [[ "${1:0:8}" == "https://" ]];then
+    URL="${1}"
+    # Get JSON from PrivatePaste
+    JSON=$(/usr/bin/pbcli --comment --json "${URL}")
+    if [ -z "$JSON" ]; then
+      echo "Failed to retrieve data from PrivateBin."
+      exit 1
+    fi
+    if ! (echo "$JSON" | jq 'has("paste")' | grep -q true); then
+      echo "This PrivateBin Paste has comments DISABLED!"
+      exit 1
+    fi
+    # Create Array of Comments
+    COMMENTS_ARRAY=$(echo "$JSON" | jq '.comments')
+    
+    collect_menu_items_array "$COMMENTS_ARRAY" 0
+    
+    # Dynamically determine terminal size
+    HEIGHT=$(tput lines)
+    WIDTH=$(tput cols)
+    # Calculate dialog dimensions with padding
+    # For dialog --menu, the third argument is the number of menu rows, not the window height!
+    # Leave 3 lines at top and bottom, and account for dialog's own borders/buttons (about 7 lines)
+    MENU_ROWS=$((HEIGHT - 8 - 7))
+    [ $MENU_ROWS -lt 5 ] && MENU_ROWS=5
+    MENU_WIDTH=$((WIDTH - 16))     # 4 spaces at each side
+
+    while true; do
+        # Show menu, full width minus 8 (4 spaces each side), 3 lines padding top/bottom
+        selected_id=$(dialog \
+            --backtitle "Edit PrivateBin Comments in the terminal" \
+            --stdout \
+            --title "Reply to Comment on PrivateBin" \
+            --ok-label "Preview before Edit" \
+            --cancel-label "New comment" \
+            --extra-button --extra-label "Cancel" \
+            --menu "Choose a comment by id:" 0 $MENU_WIDTH $MENU_ROWS \
+            "${MENU_ITEMS[@]}")
+        status=$?
+        if [ $status -eq 3 ]; then
+            # Cancel pressed: clean up and exit
+            rm -f "$preview_file" 2>/dev/null
+            exit 0
+        fi
+        if [ $status -ne 0 ]; then
+            break
+        fi
+
+        # Get full text of selected comment and write to temp file (with hard wrapping)
+        full_text=$(get_comment_by_id "$COMMENTS_ARRAY" "$selected_id" | jq -r '.comment')
+        preview_file=$(mktemp)
+        PREVIEW_HEIGHT=$((HEIGHT / 2))
+        PREVIEW_WIDTH=$((WIDTH / 2))
+        WRAP_WIDTH=$((PREVIEW_WIDTH - 4))
+        [ $WRAP_WIDTH -lt 20 ] && WRAP_WIDTH=20
+        echo "$full_text" | fold -s -w $WRAP_WIDTH > "$preview_file"
+
+        # Centered preview window, only vertical scrolling, "Edit" and "No" buttons below
+        PREVIEW_Y=$(( (HEIGHT - PREVIEW_HEIGHT) / 2 ))
+        PREVIEW_X=$(( (WIDTH - PREVIEW_WIDTH) / 2 ))
+
+        dialog --backtitle "Edit PrivateBin Comments in the terminal" \
+            --title "Comment Preview" \
+            --ok-label "Edit" \
+            --extra-button --extra-label "No" \
+            --begin $PREVIEW_Y $PREVIEW_X \
+            --textbox "$preview_file" $PREVIEW_HEIGHT $PREVIEW_WIDTH
+
+        preview_status=$?
+        rm -f "$preview_file"
+
+        # 0 = Edit (OK), 3 = No (extra button)
+        if [ $preview_status -eq 0 ]; then
+            NEW_FULLTEXT_REPLY="${full_text}"
+            NEW_SELECTED_ID="${selected_id}"
+            break
+        fi
+        # If "No" pressed, return to menu
+    done
+    # reset terminal
+    tput reset
+
+    # ---------------------------------
+    # If no Reply-To-Comment
+    # ---------------------------------
+    if [ -z "${NEW_FULLTEXT_REPLY}" ] || [ "${NEW_FULLTEXT_REPLY}" == "" ]; then
+      TMP=$(mktemp --suffix=.txt)
+      cp "${TMP}" "${TMP}.orig"
+      ${EDITOR} "${TMP}"
+      if diff "${TMP}" "${TMP}.orig";then
+        clear && printf '\e[3J'
+        echo "No comment entered. Aborting."
+        rm -f "${TMP}" "${TMP}.orig"
+        exit 1
+      fi
+      if ! /usr/bin/pbcli --comment -f "${FORMAT}" "${URL}" < "${TMP}";then
+        clear && printf '\e[3J'
+        echo "Failed to post comment."
+        rm -f "${TMP}" "${TMP}.orig"
+        exit 1
+      fi
+      rm -f "${TMP}" "${TMP}.orig"
+      clear && printf '\e[3J'
+      echo "Comment posted on ${URL}!"
+    else
+      TMP=$(mktemp --suffix=.txt)
+      REPLY=$(printf "%s" "${NEW_FULLTEXT_REPLY}" | sed -e 's/^/> /g')
+      printf "%s" "${REPLY}" > "${TMP}"
+      cp "${TMP}" "${TMP}.orig"
+      ${EDITOR} "${TMP}"
+      if diff "${TMP}" "${TMP}.orig";then
+        clear && printf '\e[3J'
+        echo "Comment didn't change. Aborting."
+        rm -f "${TMP}" "${TMP}.orig"
+        exit 0
+      fi
+      if ! /usr/bin/pbcli --comment -f "${FORMAT}" --comment-to "${NEW_SELECTED_ID}" "${URL}" < "${TMP}";then
+        clear && printf '\e[3J'
+        echo "Failed to post comment."
+        rm -f "${TMP}" "${TMP}.orig"
+        exit 1
+      fi
+      rm -f "${TMP}" "${TMP}.orig"
+      clear
+      echo "Replied to post on ${URL}!"
+    fi
+  else
+    printf "%s\n" "No valid URL provided. Aborting."
+    exit 1
+  fi
+}
+
+# ---------------------------------
+# Get the comment to reply to
+# ---------------------------------
+get_comment_by_id()
+{
+  local array_json="$1"
+  local search_id="$2"
+  local length i
+  length=$(echo "$array_json" | jq 'length')
+  for ((i=0; i<length; i++)); do
+    local item_json id
+    item_json=$(echo "$array_json" | jq -c ".[$i]")
+    id=$(echo "$item_json" | jq -r '.id')
+    if [[ "$id" == "$search_id" ]]; then
+      echo "$item_json"
+      return 0
+    fi
+    local replies
+    replies=$(echo "$item_json" | jq -c '.replies')
+    if [ "$(echo "$replies" | jq 'length')" -gt 0 ]; then
+      get_comment_by_id "$replies" "$search_id" && return 0
+    fi
+  done
+  return 1
+}
+
+# ---------------------------------
+# Recursive function to collect menu items from comments array
+# ---------------------------------
+collect_menu_items_array()
+{
+  local array_json="$1"
+  local depth="$2"
+  local length i
+  length=$(echo "$array_json" | jq 'length')
+  for ((i=0; i<length; i++)); do
+    local item_json id text replies indent
+    item_json=$(echo "$array_json" | jq -c ".[$i]")
+    id=$(echo "$item_json" | jq -r '.id')
+    text=$(echo "$item_json" | jq -r '.comment' | tr '\n' ' ' | tr -d '\r')
+    indent=$(printf '%*s' "$depth" '' | tr ' ' '-')
+    if [[ -n "$id" && -n "$text" && -n "${text// }" ]]; then
+        indent="${indent} "
+        MENU_ITEMS+=("$id" "${indent}${text}")
+    fi
+    replies=$(echo "$item_json" | jq -c '.replies')
+    if [ "$(echo "$replies" | jq 'length')" -gt 0 ]; then
+      collect_menu_items_array "$replies" $((depth + 1))
+    fi
+  done
+}
+
+# ---------------------------------
+# Create Config file
+# ---------------------------------
+create_config()
+{
+  CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/pbeasy/"
+  CONFIG_FILE="config.sh"
+  mkdir -p $CONFIG_PATH
+  cat <<EOF > "${CONFIG_PATH}${CONFIG_FILE}"
+# Configuration file for pbeasy (pb)
+# All other configuration options (like --comment-as=<name>) are still read
+# from your "pbcli" config file, so you can set your pseudonym there for
+# example.
+
+HOST="https://pb.envs.net/"   # Default Server to use.
+FORMAT="plaintext"            # Default forat for piping
+                              # ("plaintext", "syntax", "markdown")
+DISCUSSION=1                  # Turn on discussion by default (set to 0 for off)
+EOF
+}
+
+# ---------------------------------
+# MAIN FUNCTION
+# ---------------------------------
+FORMAT="plaintext"
+HOST="https://pb.envs.net/"
+DISCUSSION=1
+if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/pbeasy/config.sh" ]; then
+  source "${XDG_CONFIG_HOME:-$HOME/.config}/pbeasy/config.sh"
+fi
+export FORMAT HOST
+if [ ${DISCUSSION} -eq 1 ]; then
+  DISC="-d"
+else
+  unset DISC
+fi
+unset COMMENT
+unset SEND
+while getopts ":ic:du:s:f:h" option; do
+  case $option in
+    c) COMMENT="${OPTARG}" ;;
+    d) DISC="-d" ;;
+    f) FORMAT="${OPTARG}";export FORMAT ;;
+    i) create_config;exit 0 ;;
+    s) HOST="${OPTARG}";export HOST ;;
+    u) SEND="${OPTARG}" ;;
+    h) usage;exit 0 ;;
+    *) usage;exit 0 ;;
+  esac
+done
+shift $((OPTIND - 1))
+if [ -n "${SEND}" ] && [ -n "${COMMENT}" ]; then
+  printf "Cannot use -c and -s options together. Aborting.\n"
+  usage
+  exit 1
+fi
+if [[ -n "${COMMENT}" ]];then
+  comment "${COMMENT}"
+  exit 0;
+else
+  export SEND
+  send
+fi
+
+
+#COMMENTS_ARRAY=$(echo "$JSON" | jq '.comments')
+#
+#collect_menu_items_array "$COMMENTS_ARRAY" 0
+#
+#if [ "${#MENU_ITEMS[@]}" -eq 0 ]; then
+#  echo "No comments found."
+#  exit 1
+#fi
+#
+#result=$(dialog --clear --stdout --backtitle "Comment on PrivateBin" --cancel-label "New command" --menu "Choose a comment by id:" 20 80 15 "${MENU_ITEMS[@]}")
+#printf "comment id: %s\n" "${result}"
