@@ -10,6 +10,8 @@ pastes directly from your terminal. It provides an interactive interface
 for replying to comments, supports attachments, and integrates with your
 preferred text editor.
 
+![ppb Comment Chooser](https://dan.envs.net/images/Screenshots/ppb-1.jpg)
+
 ---
 
 ## Features
