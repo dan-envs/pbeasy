@@ -38,8 +38,11 @@ care!).
 
 ## Features
 
-- **Create new PrivateBin pastes** from files or stdin.
-- **Upload attachments** (images, files) with optional comments.
+- **Interactive use** of the `ppb` command, when used without parameters and pipe
+- **Create new PrivateBin pastes** from files or stdin. These are automatically
+  added to a local cache for easy access.
+- **Upload attachments** (images, files) with optional comments. Also
+  automatically added to the cache.
 - **Interactive comment/reply selection** using `dialog`.
 - **Reply to nested comments** with preview and editing.
 - **Clipboard integration**: Automatically copies resulting URLs using `xclip`.
