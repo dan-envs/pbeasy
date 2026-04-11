@@ -14,6 +14,14 @@ preferred text editor.
 
 ---
 
+**NOTE:**
+
+Unfortunately I get the same error message, if the Paste has expired, Comments are off or it just temporary fails to get the JSON data (which can happen).
+
+So if you're sure, the Paste hasn't expired and Comments are turned on, simply try again to fetch the Comments of the Paste.
+
+---
+
 ## Features
 
 - **Create new PrivateBin pastes** from files or stdin.
@@ -72,32 +80,31 @@ on envs):
 ## Usage
 
 ```sh
-ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] | [-h]
+ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] [-n <name>] | [-h]
 ```
 
 ### Options
 
 - `-i`  
-  Create a default config file at `$XDG_CONFIG_HOME/pbeasy/config.sh`.
-
-- `-c <URL>`  
-  Comment or reply to a comment on a PrivateBin paste. If a URL is provided,
-  fetches comments and allows replying by choosing a comment/reply from a list
-  (with preview). Uses your `$EDITOR` for editing.
+  Create a default config file at `$XDG_CONFIG_HOME/pbeasy/config.sh` with default settings.
 
 - `-u <FILE>`  
-  Upload a file as an attachment. If piped with text, the text is used as a
-  comment.
+  Upload a paste from commandline as an Attachment. Images will be shown. Plaintext, Markdown and Source Code must be piped in, otherwise they'll be shown only as an attachment! If no URL is provided, sends to your configured PrivateBin instance.
+
+- `-c <URL>`  
+  Comment or reply to a comment on a PrivateBin paste. If a URL is provided, fetches comments and allows replying by choosing a comment/reply from a list (with preview). The content you reply to is copied into your edit file in your `$EDITOR`. If no comment is selected, creates a new comment. Uses the `--comment-as=name` from your `pbcli` config file by default as your pseudonym. If not set, it's anonymous.
+
+- `-d`  
+  Enable discussion/comments for the paste, discussion is off by default.
 
 - `-s <HOST URL>`  
   Specify the PrivateBin server. Defaults to `https://pb.envs.net/`.
 
-- `-d`  
-  Enable discussion/comments for the paste (off by default).
-
 - `-f <FORMAT>`  
-  Specify the paste format: `markdown`, `plaintext`, or `syntax`.
-  Default is `plaintext`.
+  Specify the paste format: `markdown`, `plaintext`, or `syntax`. Default is `plaintext`.
+
+- `-n <name>`  
+  Specify Name for the Paste, otherwise the actual date will be used as name in the cache.
 
 - `-h`
   Show help message.
@@ -106,28 +113,45 @@ ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] | [-h]
 
 ## Examples
 
-- **Send a file as a markdown paste:**
+- Run without arguments or piping to enter interactive mode and browse stored URLs:
+
+  ```sh
+  ppb
+  ```
+
+  This lets you open, comment/reply, or delete pastes in the cache. Note: There is no easy way to determine if a paste has expired, so you must delete them manually if they no longer work.
+
+- Send a file as a new PrivateBin paste in markdown format:
 
   ```sh
   ppb -f markdown < file.md
   ```
 
-- **Comment or reply to a comment:**
+  The link will automatically be added to your cache (and needs to be deleted later).
+
+- Comment or reply to a comment on a given paste:
 
   ```sh
-  ppb -c "https://pb.envs.net/<paste>#<key>"
+  ppb -c "https://your.privatebin/paste#key"
   ```
 
-- **Send a new paste with comments enabled:**
+  The link to the paste will be automatically added to your cache.
+
+- Send a new paste with comments enabled in plaintext format using piping:
 
   ```sh
-  cat message.txt | ppb -d -f plaintext
+  cat political_statement.txt | ppb -d -f plaintext
   ```
 
-- **Send an image with a comment:**
+  The paste will be added to your cache.
+
+- Send an image with a comment and a custom name:
 
   ```sh
-  echo "My nice picture" | ppb -u image.png
+  echo "My nice picture" | ppb -u image.png -n 'Nice Image'
+  ```
+
+  This sends image.png with the comment "My nice picture" as a new paste. The paste will be added to your cache with the name "Nice Image" (names are just short identifiers to help you find them).
   ```
 
 ---
