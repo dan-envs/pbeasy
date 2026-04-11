@@ -10,6 +10,10 @@ pastes directly from your terminal. It provides an interactive interface
 for replying to comments, supports attachments, and integrates with your
 preferred text editor.
 
+**PBEasy Paste Selector:**
+![ppb Paste Selector](https://dan.envs.net/images/Screenshots/ppb-paste-select.jpg)
+
+**PBEasy Comment Chooser:**
 ![ppb Comment Chooser](https://dan.envs.net/images/Screenshots/ppb-1.jpg)
 
 ---
@@ -26,6 +30,9 @@ You also have to delete expired Pastes manually if you don't want your cache
 be cluttered with old Pastes. There is no easy way to determine if a Paste
 has expired, so you have to do it manually. If you're not sure, try to use the
 "Open" function, to see if the Paste is still available.
+
+You can also delete the current cache file and start with a clean one (use with
+care!).
 
 ---
 
@@ -87,7 +94,7 @@ on envs):
 ## Usage
 
 ```sh
-ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] [-n <name>] | [-h]
+ppb [-i] | [ -u <FILE> | -c <URL> ] [ -d | -D ] [-f <FORMAT> ] [-s <HOST URL>] [-n <name>] | [-h]
 ```
 
 ### Options
@@ -96,13 +103,16 @@ ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] [-n <nam
   Create a default config file at `$XDG_CONFIG_HOME/pbeasy/config.sh` with default settings.
 
 - `-u <FILE>`  
-  Upload a paste from commandline as an Attachment. Images will be shown. Plaintext, Markdown and Source Code must be piped in, otherwise they'll be shown only as an attachment! If no URL is provided, sends to your configured PrivateBin instance.
+  Upload a paste from command line as an Attachment. Images will be shown. Plaintext, Markdown and Source Code must be piped in, otherwise they'll be shown only as an attachment! If no URL is provided, sends to your configured PrivateBin instance.
 
 - `-c <URL>`  
   Comment or reply to a comment on a PrivateBin paste. If a URL is provided, fetches comments and allows replying by choosing a comment/reply from a list (with preview). The content you reply to is copied into your edit file in your `$EDITOR`. If no comment is selected, creates a new comment. Uses the `--comment-as=name` from your `pbcli` config file by default as your pseudonym. If not set, it's anonymous.
 
 - `-d`  
-  Enable discussion/comments for the paste, discussion is off by default.
+  Enable discussion/comments for the paste, discussion is on by default.
+
+- `-D`  
+  Disable discussion/comments for the paste, discussion is on by default.
 
 - `-s <HOST URL>`  
   Specify the PrivateBin server. Defaults to `https://pb.envs.net/`.
@@ -126,7 +136,7 @@ ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] [-n <nam
   ppb
   ```
 
-  This lets you open, comment/reply, or delete pastes in the cache. Note: There is no easy way to determine if a paste has expired, so you must delete them manually if they no longer work.
+  This lets you open, comment/reply, or delete pastes in the cache. Note: There is no easy way to determine if a paste has expired, so you must delete them manually if they no longer work. You can also delete the whole cache file and start with a clean one (use with care!).
 
 - Send a file as a new PrivateBin paste in markdown format:
 

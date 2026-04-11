@@ -4,7 +4,9 @@ declare NEW_FULLTEXT_REPLY=""
 declare NEW_SELECTED_ID=""
 
 PBCLI_BIN=$(command -v pbcli) || {
-  echo "pbcli not found in PATH. Please install pbcli and ensure it's in your PATH." >&2; exit 1;
+  echo "pbcli not found in PATH. Please install pbcli and ensure it's in your PATH." \
+    >&2
+  exit 1
 }
 export PBCLI_BIN
 
@@ -16,7 +18,8 @@ usage() {
 PBEasy - PrivateBin Terminal Helper Script
 
 Usage:
-  ppb [-i] | [ -u <FILE> | -c <URL> ] [-d] [-f <FORMAT> ] [-s <HOST URL>] [-n <name>] | [-h]
+  ppb [-i] | [ -u <FILE> | -c <URL> ] [-d | -D ] [-f <FORMAT> ] [-s <HOST URL>] \
+[-n <name>] | [-h]
 
 Options:
   -i            Create a default config file at
@@ -34,8 +37,10 @@ Options:
                 If no comment is selected, creates a new comment. It uses the
                 '--comment-as=name' from your "pbcli" config file by default as
                 your pseudonym. If not set, its anonymous.
-  -d            Enable discussion/comments for the paste, discussion is off
-                by default.
+  -d            Enable discussion/comments for the paste, discussion is on
+                by default (can be changed in config file).
+  -D            Disable discussion/comments for the paste, discussion is on
+                by default (can be changed in config file).
   -s            Specify the PrivateBin server . Defaults to
                 "https://pb.envs.net/".
   -f FORMAT     Specify the paste format (markdown, plaintext, syntax). Doesn't
@@ -59,10 +64,11 @@ Requirements:
 
 Examples:
   ppb
-      Without arguments or piping go into interactive mode to browse stored URLs
-      to Open/Comment & Reply/Delete Pastes in the cache. Unfortunately there's
-      no easy way to determine if a Paste has expired, so you have to delete
-      them manually if they don't work anymore.
+      Without arguments or piping, go into interactive mode to browse stored
+      URLs to Open/Comment & Reply/Delete Pastes in the cache. Unfortunately
+      there's no easy way to determine if a Paste has expired, so you have
+      to delete them manually if they don't work anymore. You can also delete
+      the whole cache and start a new one (use with care!).
 
   ppb -f markdown < file.md
       Send file.md as a new PrivateBin paste in markdown format. The link will
@@ -91,23 +97,14 @@ EOF
 send()
 {
   if [[ -z "${SEND}" && -p /dev/stdin ]]; then
-      if [[ -n "${DISC}" ]]; then
-        /usr/bin/cat - | $PBCLI_BIN --comment -f "${FORMAT}" --discussion "${HOST}" | tee /dev/stderr | xclip -i
-      else
-        /usr/bin/cat - | $PBCLI_BIN --comment -f "${FORMAT}" "${HOST}" | tee /dev/stderr | xclip -i
-      fi
+      /usr/bin/cat - | $PBCLI_BIN --comment -f "${FORMAT}" \
+        "${DISC}" "${HOST}" | tee /dev/stderr | xclip -i
   elif [[ -n "${SEND}" && -p /dev/stdin ]]; then
-      if [[ -n "${DISC}" ]]; then
-      /usr/bin/cat - | $PBCLI_BIN --comment --upload "${SEND}" -f "${FORMAT}" --discussion "${HOST}" | tee /dev/stderr | xclip -i
-      else
-      /usr/bin/cat - | $PBCLI_BIN --comment --upload "${SEND}" -f "${FORMAT}" "${HOST}" | tee /dev/stderr | xclip -i
-      fi
+      /usr/bin/cat - | $PBCLI_BIN --comment --upload "${SEND}" \
+        -f "${FORMAT}" "${DISC}" "${HOST}" | tee /dev/stderr | xclip -i
   else
-      if [[ -n "${DISC}" ]];then
-      $PBCLI_BIN --comment --upload "${SEND}" -f "${FORMAT}" --discussion "${HOST}"| tee /dev/stderr | xclip -i
-      else
-      $PBCLI_BIN --comment --upload "${SEND}" -f "${FORMAT}" "${HOST}" | tee /dev/stderr | xclip -i
-      fi
+      $PBCLI_BIN --comment --upload "${SEND}" -f "${FORMAT}" \
+        "${DISC}" "${HOST}"| tee /dev/stderr | xclip -i
   fi
   URL=$(xclip -o)
   if [[ "${URL:0:8}" == "https://" ]]; then
@@ -125,7 +122,7 @@ comment()
   MENU_ITEMS=()
   NEW_FULLTEXT_REPLY=""
   NEW_SELECTED_ID=""
-  echo "${1}"
+  dialog --infobox "Fetching comments from PrivateBin URL..." 3 46
   if [[ "${1:0:8}" == "https://" ]];then
     URL="${1}"
     # Get JSON from PrivatePaste
@@ -140,83 +137,100 @@ comment()
     fi
     # Create Array of Comments
     COMMENTS_ARRAY=$(echo "$JSON" | jq '.comments')
-    
+
     collect_menu_items_array "$COMMENTS_ARRAY" 0
+    if [[ ${#MENU_ITEMS[@]} -eq 0 ]]; then
+      dialog --msgbox "No comments found. Opening editor for new comment." 7 50
+      NEW_FULLTEXT_REPLY=""
+      NEW_SELECTED_ID=""
+    fi
 
     # Save the current entry to the database
     save_cache "${URL}" "${CACHE_NAME}"
-    
+
     # Dynamically determine terminal size
     HEIGHT=$(tput lines)
     WIDTH=$(tput cols)
     # Calculate dialog dimensions with padding
-    # For dialog --menu, the third argument is the number of menu rows, not the window height!
-    # Leave 3 lines at top and bottom, and account for dialog's own borders/buttons (about 7 lines)
+    # For dialog --menu, the third argument is the number of menu rows,
+    # not the window height!
+    # Leave 3 lines at top and bottom, and account for dialog's own
+    # borders/buttons (about 7 lines)
     MENU_ROWS=$((HEIGHT - 8 - 7))
     [ $MENU_ROWS -lt 5 ] && MENU_ROWS=5
     MENU_WIDTH=$((WIDTH - 16))     # 4 spaces at each side
 
     while true; do
-        # Show menu, full width minus 8 (4 spaces each side), 3 lines padding top/bottom
-        selected_id=$(dialog \
-            --backtitle "Edit PrivateBin Comments in the terminal" \
-            --stdout \
-            --title "Reply to Comment on PrivateBin" \
-            --ok-label "Preview before Reply" \
-            --cancel-label "New comment" \
-            --extra-button --extra-label "Cancel" \
-            --menu "Choose a comment by id:" 0 $MENU_WIDTH $MENU_ROWS \
-            "${MENU_ITEMS[@]}")
-        status=$?
-        if [ $status -eq 3 ]; then
-            # Cancel pressed: clean up and exit or return
-            rm -f "$preview_file" 2>/dev/null
-            if [ "$EXIT_ON_CANCEL" -eq 1 ]; then
-              exit 0
-            else
-              return 0
-            fi
+      # Show menu, full width minus 8 (4 spaces each side), 3 lines padding
+      # top/bottom
+      selected_id=$(dialog \
+        --backtitle "Edit PrivateBin Comments in the terminal" \
+        --stdout \
+        --title "Reply to Comment on PrivateBin" \
+        --ok-label "Preview before Reply" \
+        --cancel-label "New comment" \
+        --extra-button --extra-label "Cancel" \
+        --menu "Choose a comment by id:" 0 $MENU_WIDTH $MENU_ROWS \
+        "${MENU_ITEMS[@]}")
+      status=$?
+      if [ $status -eq 3 ]; then
+        # Cancel pressed: clean up and exit or return
+        rm -f "$preview_file" 2>/dev/null
+        if [ "$EXIT_ON_CANCEL" -eq 1 ]; then
+          clear
+          tput reset
+          exit 0
+        else
+          clear
+          tput reset
+          return 0
         fi
-        if [ $status -ne 0 ]; then
-            break
-        fi
+      fi
+      if [ $status -ne 0 ]; then
+        break
+      fi
 
-        # Get full text of selected comment and write to temp file (with hard wrapping)
-        full_text=$(get_comment_by_id "$COMMENTS_ARRAY" "$selected_id" | jq -r '.comment')
-        preview_file=$(mktemp)
-        PREVIEW_HEIGHT=$((HEIGHT / 2))
-        PREVIEW_WIDTH=$((WIDTH / 2))
-        WRAP_WIDTH=$((PREVIEW_WIDTH - 4))
-        [ $WRAP_WIDTH -lt 20 ] && WRAP_WIDTH=20
-        echo "$full_text" | fold -s -w $WRAP_WIDTH > "$preview_file"
+      # Get full text of selected comment and write to temp file (with hard
+      # wrapping)
+      full_text=$(get_comment_by_id "$COMMENTS_ARRAY" "$selected_id" | \
+        jq -r '.comment')
+      preview_file=$(mktemp)
+      PREVIEW_HEIGHT=$((HEIGHT / 2))
+      PREVIEW_WIDTH=$((WIDTH / 2))
+      WRAP_WIDTH=$((PREVIEW_WIDTH - 4))
+      [ $WRAP_WIDTH -lt 20 ] && WRAP_WIDTH=20
+      echo "$full_text" | fold -s -w $WRAP_WIDTH > "$preview_file"
 
-        # Centered preview window, only vertical scrolling, "Edit" and "No" buttons below
-        PREVIEW_Y=$(( (HEIGHT - PREVIEW_HEIGHT) / 2 ))
-        PREVIEW_X=$(( (WIDTH - PREVIEW_WIDTH) / 2 ))
+      # Centered preview window, only vertical scrolling, "Edit" and "No"
+      # buttons below
+      PREVIEW_Y=$(( (HEIGHT - PREVIEW_HEIGHT) / 2 ))
+      PREVIEW_X=$(( (WIDTH - PREVIEW_WIDTH) / 2 ))
 
-        dialog --backtitle "Edit PrivateBin Comments in the terminal" \
-            --title "Comment Preview" \
-            --ok-label "Edit" \
-            --extra-button --extra-label "No" \
-            --begin $PREVIEW_Y $PREVIEW_X \
-            --textbox "$preview_file" $PREVIEW_HEIGHT $PREVIEW_WIDTH
+      dialog --backtitle "Edit PrivateBin Comments in the terminal" \
+        --title "Comment Preview" \
+        --ok-label "Edit" \
+        --extra-button --extra-label "No" \
+        --begin $PREVIEW_Y $PREVIEW_X \
+        --textbox "$preview_file" $PREVIEW_HEIGHT $PREVIEW_WIDTH
 
-        preview_status=$?
-        rm -f "$preview_file"
+      preview_status=$?
+      rm -f "$preview_file"
 
-        # 0 = Edit (OK), 3 = No (extra button)
-        if [ $preview_status -eq 0 ]; then
-            NEW_FULLTEXT_REPLY="${full_text}"
-            NEW_SELECTED_ID="${selected_id}"
-            break
-        fi
-        # If "No" pressed, return to menu
+      # 0 = Edit (OK), 3 = No (extra button)
+      if [ $preview_status -eq 0 ]; then
+        NEW_FULLTEXT_REPLY="${full_text}"
+        NEW_SELECTED_ID="${selected_id}"
+        break
+      fi
+      # If "No" pressed, return to menu
     done
+    tput reset
 
     # ---------------------------------
     # If no Reply-To-Comment
     # ---------------------------------
-    if [ -z "${NEW_FULLTEXT_REPLY}" ] || [ "${NEW_FULLTEXT_REPLY}" == "" ]; then
+    if [ -z "${NEW_FULLTEXT_REPLY}" ] || \
+       [ "${NEW_FULLTEXT_REPLY}" = "" ]; then
       TMP=$(mktemp --suffix=.txt)
       cp "${TMP}" "${TMP}.orig"
       ${EDITOR} "${TMP}"
@@ -224,18 +238,24 @@ comment()
         clear && printf '\e[3J'
         dialog --msgbox "No comment entered. Aborting." 7 50
         rm -f "${TMP}" "${TMP}.orig"
+        clear
+        tput reset
         return 0
       fi
       if ! $PBCLI_BIN --comment -f "${FORMAT}" "${URL}" < "${TMP}";then
         clear && printf '\e[3J'
         dialog --msgbox "Failed to post comment." 7 50
         rm -f "${TMP}" "${TMP}.orig"
+        clear
+        tput reset
         return 0
       fi
       rm -f "${TMP}" "${TMP}.orig"
       clear && printf '\e[3J'
       dialog --msgbox "Comment posted on ${URL}!" 7 50
       save_cache "${URL}" "${CACHE_NAME}"
+      clear
+      tput reset
       return 0
     else
       TMP=$(mktemp --suffix=.txt)
@@ -247,22 +267,31 @@ comment()
         clear && printf '\e[3J'
         dialog --msgbox "Comment didn't change. Aborting." 7 50
         rm -f "${TMP}" "${TMP}.orig"
+        clear
+        tput reset
         return 0
       fi
-      if ! $PBCLI_BIN --comment -f "${FORMAT}" --comment-to "${NEW_SELECTED_ID}" "${URL}" < "${TMP}";then
+      if ! $PBCLI_BIN --comment -f "${FORMAT}" --comment-to \
+        "${NEW_SELECTED_ID}" "${URL}" < "${TMP}";then
         clear && printf '\e[3J'
         dialog --msgbox "Failed to post comment." 7 50
         rm -f "${TMP}" "${TMP}.orig"
+        clear
+        tput reset
         return 0
       fi
       rm -f "${TMP}" "${TMP}.orig"
       clear
       dialog --msgbox "Replied to post on ${URL}!" 7 50
       save_cache "${URL}" "${CACHE_NAME}"
+      clear
+      tput reset
       return 0
     fi
   else
     dialog --msgbox "No valid URL provided. Aborting." 7 50
+    clear
+    tput reset
     return 0
   fi
 }
@@ -272,11 +301,14 @@ comment()
 # ---------------------------------
 delete_entry_from_cache()
 {
-    local url_to_delete="$1"
-    # Remove the line with the given URL from CACHE
-    CACHE=$(printf "%s\n" "$CACHE" | awk -F'\t' -v url="$url_to_delete" '$1 != url')
-    # Save updated CACHE
-    printf "%s\n" "${CACHE}" | gpg --quiet --passphrase "${CACHE_PASS}" --batch --yes --symmetric -o "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
+  local url_to_delete="$1"
+  # Remove the line with the given URL from CACHE
+  CACHE=$(printf "%s\n" "$CACHE" | \
+    awk -F'\t' -v url="$url_to_delete" '$1 != url')
+  # Save updated CACHE
+  printf "%s\n" "${CACHE}" | gpg --quiet --passphrase "${CACHE_PASS}" \
+    --batch --yes --symmetric \
+    -o "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
 }
 
 # ---------------------------------
@@ -289,12 +321,14 @@ save_cache()
   fi
   URL=$(printf "%s" "${1}" | tr -d "\r")
   NAME=$(printf "%s" "${2}" | tr -d "\r")
-# Ensure CACHE ends with a newline before appending
-if [[ -n "$CACHE" && "${CACHE: -1}" != $'\n' ]]; then
-  CACHE="${CACHE}"$'\n'
-fi
-CACHE="${CACHE}${URL}"$'\t'"${NAME}"
-  printf "%s\n" "${CACHE}" | gpg --quiet --passphrase "${CACHE_PASS}" --batch --yes --symmetric -o "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
+  # Ensure CACHE ends with a newline before appending
+  if [[ -n "$CACHE" && "${CACHE: -1}" != $'\n' ]]; then
+    CACHE="${CACHE}"$'\n'
+  fi
+  CACHE="${CACHE}${URL}"$'\t'"${NAME}"
+  printf "%s\n" "${CACHE}" | gpg --quiet --passphrase "${CACHE_PASS}" \
+    --batch --yes --symmetric \
+    -o "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
 }
 
 # ---------------------------------
@@ -340,8 +374,8 @@ collect_menu_items_array()
     nick=$(echo "$item_json" | jq -r '.nickname' | tr -d "\r")
     indent=$(printf '%*s' "$depth" '' | tr " " "-")
     if [[ -n "$id" && -n "$text" && -n "${text// }" ]]; then
-        indent="${indent} "
-        MENU_ITEMS+=("$id" "${nick%%*( )}: ${indent}${text}")
+      indent="${indent} "
+      MENU_ITEMS+=("$id" "${nick%%*( )}: ${indent}${text}")
     fi
     replies=$(echo "$item_json" | jq -c '.replies')
     if [ "$(echo "$replies" | jq 'length')" -gt 0 ]; then
@@ -357,7 +391,7 @@ create_config()
 {
   CONFIG_PATH="${XDG_CONFIG_HOME:-$HOME/.config}/pbeasy/"
   CONFIG_FILE="config.sh"
-  mkdir -p $CONFIG_PATH
+  mkdir -p "${CONFIG_PATH}"
   cat <<EOF > "${CONFIG_PATH}${CONFIG_FILE}"
 # Configuration file for pbeasy (ppb, PrivatePasteBin)
 # All other configuration options (like --comment-as=<name>) are still read
@@ -378,61 +412,103 @@ EOF
 # ---------------------------------
 # Show cached PrivateBin Links
 # ---------------------------------
+
 show_cache()
 {
-    HEIGHT=$(tput lines)
-    WIDTH=$(tput cols)
-    MENU_ROWS=$((HEIGHT - 8 - 7))
-    [ $MENU_ROWS -lt 5 ] && MENU_ROWS=5
-    MENU_WIDTH=$((WIDTH - 16))
+  HEIGHT=$(tput lines)
+  WIDTH=$(tput cols)
+  MENU_ROWS=$((HEIGHT - 8 - 7))
+  [ $MENU_ROWS -lt 5 ] && MENU_ROWS=5
+  MENU_WIDTH=$((WIDTH - 16))
 
-    ENTRIES=()
-    while IFS=$'\t' read -r url name; do
-        [ -z "$url" ] && continue
-        ENTRIES+=("$url" "$(printf '%-18.18s' "$name")")
-    done <<< "$CACHE"
+  ENTRIES=()
+  declare -A TAG_TO_FULLURL
+  while IFS=$'\t' read -r url name; do
+    [ -z "$url" ] && continue
+    tag="${url%%#*}"
+    ENTRIES+=("$tag" "$(printf '%-18.18s' "$name")")
+    TAG_TO_FULLURL["$tag"]="$url"
+  done <<< "$CACHE"
+  if [ "${#ENTRIES[@]}" -eq 0 ]; then
+    dialog --msgbox \
+      "No entries in cache. Send a paste or comment with '-c <url>' or '-u <file>' to add entries to the cache." \
+      7 50
+    tput reset
+    exit 0
+  fi
 
-    while true; do
-        selected_url=$(dialog \
-            --backtitle "Choose PrivateBin Entry to show, comment or delete." \
-            --stdout \
-            --title "Choose Entry" \
-            --ok-label "Select" \
-            --cancel-label "Quit" \
-            --menu "Choose a PrivateBin entry:" 0 $MENU_WIDTH $MENU_ROWS \
-            "${ENTRIES[@]}")
-        status=$?
-        if [ $status -ne 0 ]; then
-            break
-        fi
+  while true; do
+    selected_tag=$(dialog \
+      --backtitle "Choose PrivateBin Entry to show, comment or delete." \
+      --stdout \
+      --title "Choose Entry" \
+      --ok-label "Select" \
+      --cancel-label "Quit" \
+      --extra-button --extra-label "Delete whole cache" \
+      --menu "Choose a PrivateBin entry:" 0 $MENU_WIDTH $MENU_ROWS \
+      "${ENTRIES[@]}")
+    status=$?
+    if [ $status -eq 3 ]; then
+      # Extra button pressed: Delete whole cache
+      dialog --yesno \
+        "Are you sure you want to delete the entire cache?" 7 50
+      if [ $? -eq 0 ]; then
+        rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
+        dialog --msgbox "Cache deleted!" 7 30
+        tput reset
+        exit 0
+      else
+        continue
+      fi
+    fi
+    if [ $status -ne 0 ]; then
+      break
+    fi
 
-        action=$(dialog --stdout --menu "Choose an action for PrivateBin entry:" 12 50 3 \
-            "Open" "Open PrivateBin Entry with xdg-open" \
-            "Comment" "Comment PrivateBin Entry if enabled" \
-            "Delete" "Delete PrivateBin Entry (must be done manually)")
-        if [ $? -ne 0 ]; then
-            continue
-        fi
-        case "$action" in
-            Open)
-                xdg-open "${selected_url}"
-                ;;
-            Comment)
-                NEW_FULLTEXT_REPLY=""
-                NEW_SELECTED_ID=""
-                comment "${selected_url}" 0
-                ;;
-            Delete)
-                delete_entry_from_cache "${selected_url}"
-                # Refresh ENTRIES after deletion
-                ENTRIES=()
-                while IFS=$'\t' read -r url name; do
-                    [ -z "$url" ] && continue
-                    ENTRIES+=("$url" "$(printf '%-18.18s' "$name")")
-                done <<< "$CACHE"
-                ;;
-        esac
-    done
+    # Get the full URL from the selected tag
+    selected_url="${TAG_TO_FULLURL[$selected_tag]}"
+    tput reset
+    # Only show the action menu if "Select" was pressed (status == 0)
+    action=$(dialog --stdout \
+      --backtitle "Choose an action for the PrivateBin Entry" \
+      --menu \
+      "Choose an action for PrivateBin entry:" 12 60 4 \
+      "Open" "Open PrivateBin Entry with xdg-open" \
+      "Copy URL" "Copy URL to clipboard and quit" \
+      "Comment" "Comment PrivateBin Entry if enabled" \
+      "Delete" "Delete PrivateBin Entry")
+    if [ -z "${action}" ]; then
+      continue
+    fi
+    case "$action" in
+      Open)
+        xdg-open "${selected_url}"
+        ;;
+      Copy\ URL)
+        printf "%s" "${selected_url}" | xclip -i
+        dialog --msgbox "URL copied to clipboard." 7 40
+        tput reset
+        exit 0
+        ;;
+      Comment)
+        NEW_FULLTEXT_REPLY=""
+        NEW_SELECTED_ID=""
+        comment "${selected_url}" 0
+        ;;
+      Delete)
+        delete_entry_from_cache "${selected_url}"
+        # Refresh ENTRIES and TAG_TO_FULLURL after deletion
+        ENTRIES=()
+        TAG_TO_FULLURL=()
+        while IFS=$'\t' read -r url name; do
+          [ -z "$url" ] && continue
+          tag="${url%%#*}"
+          ENTRIES+=("$tag" "$(printf '%-15.15s' "$name")")
+          TAG_TO_FULLURL["$tag"]="$url"
+        done <<< "$CACHE"
+        ;;
+    esac
+  done
 }
 
 # ---------------------------------
@@ -447,10 +523,12 @@ if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/pbeasy/config.sh" ]; then
 fi
 if [ ! -f "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg" ]; then
   mkdir -p "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/"
-  printf "" | gpg --quiet --passphrase "${CACHE_PASS}" --batch --yes --symmetric -o "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
+  printf "" | gpg --quiet --passphrase "${CACHE_PASS}" --batch --yes --symmetric \
+    -o "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
 fi
 if [[ -f "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg" ]]; then
-  CACHE=$(cat "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg" | gpg --quiet --passphrase "${CACHE_PASS}" --batch --yes --decrypt)
+  CACHE=$(gpg --quiet --passphrase "${CACHE_PASS}" --batch --yes --decrypt \
+    "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg")
 else
   CACHE=""
 fi
@@ -465,10 +543,11 @@ export CACHE_NAME
 unset COMMENT
 unset SEND
 
-while getopts "ic:dn:u:s:f:h" option; do
+while getopts "ic:dDn:u:s:f:h" option; do
   case $option in
     c) COMMENT="${OPTARG}" ;;
-    d) DISC="-d" ;;
+    d) DISC="--discussion" ;;
+    D) DISC="--no-discussion" ;;
     f) FORMAT="${OPTARG}";export FORMAT ;;
     i) create_config;tput reset;exit 0 ;;
     n) CACHE_NAME="${OPTARG}";export CACHE_NAME ;;
@@ -479,19 +558,22 @@ while getopts "ic:dn:u:s:f:h" option; do
   esac
 done
 shift $((OPTIND - 1))
-if [ $# -eq 0 ] && [ ! -p /dev/stdin ] && [ "${CACHE}" != "" ] && [ -z "${SEND}" ] && [ -z "${COMMENT}" ]; then
+if [ $# -eq 0 ] && [ ! -p /dev/stdin ] && [ -z "${SEND}" ] && \
+   [ -z "${COMMENT}" ]; then
   show_cache
+  tput reset
   exit 0
 fi
 if [ -n "${SEND}" ] && [ -n "${COMMENT}" ]; then
   printf "Cannot use -c and -u options together. Aborting.\n"
-  usage
   exit 1
 fi
 if [[ -n "${COMMENT}" ]];then
   comment "${COMMENT}" 1
+  tput reset
   exit 0;
 else
   export SEND
   send
+  tput reset
 fi
