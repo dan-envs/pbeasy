@@ -16,9 +16,16 @@ preferred text editor.
 
 **NOTE:**
 
-Unfortunately I get the same error message, if the Paste has expired, Comments are off or it just temporary fails to get the JSON data (which can happen).
+Unfortunately I get the same error message, if the Paste has expired, Comments
+are off or it just temporary fails to get the JSON data (which can happen).
 
-So if you're sure, the Paste hasn't expired and Comments are turned on, simply try again to fetch the Comments of the Paste.
+So if you're sure, the Paste hasn't expired and Comments are turned on,
+simply try again to fetch the Comments of the Paste.
+
+You also have to delete expired Pastes manually if you don't want your cache
+be cluttered with old Pastes. There is no easy way to determine if a Paste
+has expired, so you have to do it manually. If you're not sure, try to use the
+"Open" function, to see if the Paste is still available.
 
 ---
 
