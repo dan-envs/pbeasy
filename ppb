@@ -178,11 +178,11 @@ comment()
         rm -f "$preview_file" 2>/dev/null
         if [ "$EXIT_ON_CANCEL" -eq 1 ]; then
           clear
-          tput reset
+          clear
           exit 0
         else
           clear
-          tput reset
+          clear
           return 0
         fi
       fi
@@ -224,7 +224,7 @@ comment()
       fi
       # If "No" pressed, return to menu
     done
-    tput reset
+    clear
 
     # ---------------------------------
     # If no Reply-To-Comment
@@ -239,7 +239,7 @@ comment()
         dialog --msgbox "No comment entered. Aborting." 7 50
         rm -f "${TMP}" "${TMP}.orig"
         clear
-        tput reset
+        clear
         return 0
       fi
       if ! $PBCLI_BIN --comment -f "${FORMAT}" "${URL}" < "${TMP}";then
@@ -247,7 +247,7 @@ comment()
         dialog --msgbox "Failed to post comment." 7 50
         rm -f "${TMP}" "${TMP}.orig"
         clear
-        tput reset
+        clear
         return 0
       fi
       rm -f "${TMP}" "${TMP}.orig"
@@ -255,7 +255,7 @@ comment()
       dialog --msgbox "Comment posted on ${URL}!" 7 50
       save_cache "${URL}" "${CACHE_NAME}"
       clear
-      tput reset
+      clear
       return 0
     else
       TMP=$(mktemp --suffix=.txt)
@@ -268,7 +268,7 @@ comment()
         dialog --msgbox "Comment didn't change. Aborting." 7 50
         rm -f "${TMP}" "${TMP}.orig"
         clear
-        tput reset
+        clear
         return 0
       fi
       if ! $PBCLI_BIN --comment -f "${FORMAT}" --comment-to \
@@ -277,7 +277,7 @@ comment()
         dialog --msgbox "Failed to post comment." 7 50
         rm -f "${TMP}" "${TMP}.orig"
         clear
-        tput reset
+        clear
         return 0
       fi
       rm -f "${TMP}" "${TMP}.orig"
@@ -285,13 +285,13 @@ comment()
       dialog --msgbox "Replied to post on ${URL}!" 7 50
       save_cache "${URL}" "${CACHE_NAME}"
       clear
-      tput reset
+      clear
       return 0
     fi
   else
     dialog --msgbox "No valid URL provided. Aborting." 7 50
     clear
-    tput reset
+    clear
     return 0
   fi
 }
@@ -433,7 +433,7 @@ show_cache()
     dialog --msgbox \
       "No entries in cache. Send a paste or comment with '-c <url>' or '-u <file>' to add entries to the cache." \
       7 50
-    tput reset
+    clear
     exit 0
   fi
 
@@ -455,7 +455,7 @@ show_cache()
       if [ $? -eq 0 ]; then
         rm -f "${XDG_DATA_HOME:-$HOME/.local/share}/pbeasy/linkcache.gpg"
         dialog --msgbox "Cache deleted!" 7 30
-        tput reset
+        clear
         exit 0
       else
         continue
@@ -467,7 +467,7 @@ show_cache()
 
     # Get the full URL from the selected tag
     selected_url="${TAG_TO_FULLURL[$selected_tag]}"
-    tput reset
+    clear
     # Only show the action menu if "Select" was pressed (status == 0)
     action=$(dialog --stdout \
       --backtitle "Choose an action for the PrivateBin Entry" \
@@ -487,7 +487,7 @@ show_cache()
       Copy\ URL)
         printf "%s" "${selected_url}" | xclip -i
         dialog --msgbox "URL copied to clipboard." 7 40
-        tput reset
+        clear
         exit 0
         ;;
       Comment)
@@ -549,7 +549,7 @@ while getopts "ic:dDn:u:s:f:h" option; do
     d) DISC="--discussion" ;;
     D) DISC="--no-discussion" ;;
     f) FORMAT="${OPTARG}";export FORMAT ;;
-    i) create_config;tput reset;exit 0 ;;
+    i) create_config;clear;exit 0 ;;
     n) CACHE_NAME="${OPTARG}";export CACHE_NAME ;;
     s) HOST="${OPTARG}";export HOST ;;
     u) SEND="${OPTARG}" ;;
@@ -561,7 +561,7 @@ shift $((OPTIND - 1))
 if [ $# -eq 0 ] && [ ! -p /dev/stdin ] && [ -z "${SEND}" ] && \
    [ -z "${COMMENT}" ]; then
   show_cache
-  tput reset
+  clear
   exit 0
 fi
 if [ -n "${SEND}" ] && [ -n "${COMMENT}" ]; then
@@ -570,10 +570,10 @@ if [ -n "${SEND}" ] && [ -n "${COMMENT}" ]; then
 fi
 if [[ -n "${COMMENT}" ]];then
   comment "${COMMENT}" 1
-  tput reset
+  clear
   exit 0;
 else
   export SEND
   send
-  tput reset
+  clear
 fi
