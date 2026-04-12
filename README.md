@@ -36,6 +36,27 @@ care!).
 
 ---
 
+## Profanity Plugin Integration
+
+A helper plugin, `ppb_profanity_plugin.py`, is included for integration with the [profanity](https://profanity-im.github.io/) XMPP client. This plugin allows you to quickly send PrivateBin paste Comments/Replies directly from within profanity.
+
+> ⚠️**Warning:**  
+>This plugin is only usable if you are running profanity inside a TMUX session. It relies on TMUX for communication between the plugin and the `ppb` script.
+
+### Usage
+
+1. Copy `ppb_profanity_plugin.py` to your profanity plugins directory (usually `~/.local/share/profanity/plugins/`).
+2. Start profanity inside a TMUX session.
+3. Load the plugin in profanity:
+   ```
+   /plugin load ppb_profanity_plugin.py
+   ```
+4. Use the plugin commands as described in the plugin's help or source comments to send PrivateBin Comments/Replies and manage Paste links.
+
+See the plugin file for more details and usage instructions.
+
+---
+
 ## Features
 
 - **Interactive use** of the `ppb` command, when used without parameters and pipe
