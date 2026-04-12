@@ -9,6 +9,9 @@ PBCLI_BIN=$(command -v pbcli) || {
   exit 1
 }
 export PBCLI_BIN
+XDG_OPEN=$(command -v xdg-open) || {
+  XDG_OPEN="${HOME}/bin/xdg-open"
+}
 
 # ---------------------------------
 # usage function for HELP display
@@ -482,7 +485,7 @@ show_cache()
     fi
     case "$action" in
       Open)
-        xdg-open "${selected_url}"
+        ${XDG_OPEN} "${selected_url}"
         ;;
       Copy\ URL)
         printf "%s" "${selected_url}" | xclip -i
