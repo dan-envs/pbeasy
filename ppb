@@ -485,7 +485,12 @@ show_cache()
     fi
     case "$action" in
       Open)
-        ${XDG_OPEN} "${selected_url}"
+        if [[ -n "$SSH_CONNECTION" || -n "$SSH_TTY" ]]; then
+          printf "%s\n" "${selected_url}"
+          dialog --msgbox "Running over SSH. URL printed to terminal." 7 50
+        else
+          ${XDG_OPEN} "${selected_url}"
+        fi
         ;;
       Copy\ URL)
         printf "%s" "${selected_url}" | xclip -i
