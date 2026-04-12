@@ -487,7 +487,8 @@ show_cache()
       Open)
         if [[ -n "$SSH_CONNECTION" || -n "$SSH_TTY" ]]; then
           printf "%s\n" "${selected_url}"
-          dialog --msgbox "Running over SSH. URL printed to terminal." 7 50
+          dialog --msgbox \
+            "Running over SSH. URL put out here:\n${selected_url}" 7 90
         else
           ${XDG_OPEN} "${selected_url}"
         fi
