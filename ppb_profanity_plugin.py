@@ -74,7 +74,7 @@ def prof_init(version, status, account_name, fulljid):
         ["[url]", "URL to open with ppb"]
     ]
     examples = [
-        "/ppb http://pb.envs.net/?<paste>#<key>"
+        "/ppb http://privatebin.net/?<paste>#<key>"
     ]
 
     prof.register_command("/ppb", 0, 1, synopsis, description,

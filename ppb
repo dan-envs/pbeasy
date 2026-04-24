@@ -45,11 +45,11 @@ Options:
   -D            Disable discussion/comments for the paste, discussion is on
                 by default (can be changed in config file).
   -s            Specify the PrivateBin server . Defaults to
-                "https://pb.envs.net/".
+                "https://private.bin/".
   -f FORMAT     Specify the paste format (markdown, plaintext, syntax). Doesn't
                 use the format configured in your "pbcli" yet. The default is
                 'plaintext'.
-  -s            Specify host URL for uploads. Defaults to https://pb.envs.net/.
+  -s            Specify host URL for uploads. Defaults to https://private.bin/.
   -n            Specify Name for the Paste, otherwise the actual date will be
                 used as name in the cache.
   -h            Display this help.
@@ -401,7 +401,7 @@ create_config()
 # from your "pbcli" config file, so you can set your pseudonym there for
 # example.
 
-HOST="https://pb.envs.net/"   # Default Server to use.
+HOST="https://privatebin.net/"   # Default Server to use.
 FORMAT="plaintext"            # Default forat for piping
                               # ("plaintext", "syntax", "markdown")
 DISCUSSION=1                  # Turn on discussion by default (set to 0 for off)
@@ -524,7 +524,7 @@ show_cache()
 # MAIN FUNCTION
 # ---------------------------------
 FORMAT="plaintext"
-HOST="https://pb.envs.net/"
+HOST="https://private.bin/"
 DISCUSSION=1
 CACHE_PASS="Passw0rd123"
 if [ -f "${XDG_CONFIG_HOME:-$HOME/.config}/pbeasy/config.sh" ]; then

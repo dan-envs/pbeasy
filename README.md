@@ -139,7 +139,7 @@ ppb [-i] | [ -u <FILE> | -c <URL> ] [ -d | -D ] [-f <FORMAT> ] [-s <HOST URL>] [
   Disable discussion/comments for the paste, discussion is on by default.
 
 - `-s <HOST URL>`  
-  Specify the PrivateBin server. Defaults to `https://pb.envs.net/`.
+  Specify the PrivateBin server. Defaults to `https://privatebin.net/`.
 
 - `-f <FORMAT>`  
   Specify the paste format: `markdown`, `plaintext`, or `syntax`. Default is `plaintext`.
