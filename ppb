@@ -494,7 +494,7 @@ show_cache()
         fi
         ;;
       Copy\ URL)
-        printf "%s" "${selected_url}" | xclip -i
+        printf "%s" "${selected_url}" | tr -d '\r\n' | xclip -i
         dialog --msgbox "URL copied to clipboard." 7 40
         clear
         exit 0
