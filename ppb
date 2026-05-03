@@ -101,13 +101,13 @@ send()
 {
   if [[ -z "${SEND}" && -p /dev/stdin ]]; then
       /usr/bin/cat - | $PBCLI_BIN --comment -f "${FORMAT}" \
-        "${DISC}" "${HOST}" | tee /dev/stderr | xclip -i
+        "${DISC}" "${HOST}" | tee /dev/stderr | tr -d '\r\n' | xclip -i
   elif [[ -n "${SEND}" && -p /dev/stdin ]]; then
       /usr/bin/cat - | $PBCLI_BIN --comment --upload "${SEND}" \
-        -f "${FORMAT}" "${DISC}" "${HOST}" | tee /dev/stderr | xclip -i
+        -f "${FORMAT}" "${DISC}" "${HOST}" | tee /dev/stderr | tr -d '\r\n' | xclip -i
   else
       $PBCLI_BIN --comment --upload "${SEND}" -f "${FORMAT}" \
-        "${DISC}" "${HOST}"| tee /dev/stderr | xclip -i
+        "${DISC}" "${HOST}"| tee /dev/stderr | tr -d '\r\n' | xclip -i
   fi
   URL=$(xclip -o)
   if [[ "${URL:0:8}" == "https://" ]]; then
